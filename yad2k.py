@@ -4,9 +4,9 @@ Reads Darknet19 config and weights and creates Keras model with TF backend.
 
 Currently only supports layers in Darknet19 config.
 """
-
+from __future__ import print_function
 import argparse
-import configparser
+import ConfigParser
 import io
 import os
 from collections import defaultdict
@@ -57,7 +57,7 @@ def unique_config_sections(config_file):
                 _section = section + '_' + str(section_counters[section])
                 section_counters[section] += 1
                 line = line.replace(section, _section)
-            output_stream.write(line)
+            output_stream.write(unicode(line))
     output_stream.seek(0)
     return output_stream
 
@@ -87,30 +87,30 @@ def _main(args):
 
     print('Parsing Darknet config.')
     unique_config_file = unique_config_sections(config_path)
-    cfg_parser = configparser.ConfigParser()
-    cfg_parser.read_file(unique_config_file)
+    cfg_parser = ConfigParser.ConfigParser()
+    cfg_parser.readfp(unique_config_file)
 
     print('Creating Keras model.')
     if args.fully_convolutional:
         image_height, image_width = None, None
     else:
-        image_height = int(cfg_parser['net_0']['height'])
-        image_width = int(cfg_parser['net_0']['width'])
+        image_height = int(cfg_parser.get('net_0','height'))
+        image_width = int(cfg_parser.get('net_0','width'))
     prev_layer = Input(shape=(image_height, image_width, 3))
     all_layers = [prev_layer]
 
-    weight_decay = float(cfg_parser['net_0']['decay']
+    weight_decay = float(cfg_parser.get('net_0','decay')
                          ) if 'net_0' in cfg_parser.sections() else 5e-4
     count = 0
     for section in cfg_parser.sections():
         print('Parsing section {}'.format(section))
         if section.startswith('convolutional'):
-            filters = int(cfg_parser[section]['filters'])
-            size = int(cfg_parser[section]['size'])
-            stride = int(cfg_parser[section]['stride'])
-            pad = int(cfg_parser[section]['pad'])
-            activation = cfg_parser[section]['activation']
-            batch_normalize = 'batch_normalize' in cfg_parser[section]
+            filters = int(cfg_parser.get(section,'filters'))
+            size = int(cfg_parser.get(section,'size'))
+            stride = int(cfg_parser.get(section,'stride'))
+            pad = int(cfg_parser.get(section,'pad'))
+            activation = cfg_parser.get(section,'activation')
+            batch_normalize = cfg_parser.has_option(section, 'batch_normalize')
 
             # padding='same' is equivalent to Darknet pad=1
             padding = 'same' if pad == 1 else 'valid'
@@ -198,8 +198,8 @@ def _main(args):
                 all_layers.append(act_layer)
 
         elif section.startswith('maxpool'):
-            size = int(cfg_parser[section]['size'])
-            stride = int(cfg_parser[section]['stride'])
+            size = int(cfg_parser.get(section,'size'))
+            stride = int(cfg_parser.get(section,'stride'))
             all_layers.append(
                 MaxPooling2D(
                     padding='same',
@@ -214,7 +214,7 @@ def _main(args):
             prev_layer = all_layers[-1]
 
         elif section.startswith('route'):
-            ids = [int(i) for i in cfg_parser[section]['layers'].split(',')]
+            ids = [int(i) for i in cfg_parser.get(section,'layers').split(',')]
             layers = [all_layers[i] for i in ids]
             if len(layers) > 1:
                 print('Concatenating route layers:', layers)
@@ -227,7 +227,7 @@ def _main(args):
                 prev_layer = skip_layer
 
         elif section.startswith('reorg'):
-            block_size = int(cfg_parser[section]['stride'])
+            block_size = int(cfg_parser.get(section,'stride'))
             assert block_size == 2, 'Only reorg with stride 2 supported.'
             all_layers.append(
                 Lambda(
@@ -238,7 +238,7 @@ def _main(args):
 
         elif section.startswith('region'):
             with open('{}_anchors.txt'.format(output_root), 'w') as f:
-                print(cfg_parser[section]['anchors'], file=f)
+                print(cfg_parser.get(section,'anchors'), file=f)
 
         elif (section.startswith('net') or section.startswith('cost') or
               section.startswith('softmax')):
